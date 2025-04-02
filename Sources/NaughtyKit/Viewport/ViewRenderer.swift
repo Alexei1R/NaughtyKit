@@ -1,6 +1,4 @@
 // Copyright (c) 2025 The Noughy Fox
-//
-// This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
 import MetalKit
@@ -34,17 +32,11 @@ public class ViewportRenderer {
 
     private func defaultDraw(in view: MTKView) {
         guard let device = view.device,
-            let commandQueue = device.makeCommandQueue(),
-            let renderPassDescriptor = view.currentRenderPassDescriptor,
-            let drawable = view.currentDrawable
-        else {
-            return
-        }
-
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
-        guard
-            let renderEncoder = commandBuffer.makeRenderCommandEncoder(
-                descriptor: renderPassDescriptor)
+              let commandQueue = device.makeCommandQueue(),
+              let renderPassDescriptor = view.currentRenderPassDescriptor,
+              let drawable = view.currentDrawable,
+              let commandBuffer = commandQueue.makeCommandBuffer(),
+              let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)
         else { return }
 
         renderEncoder.endEncoding()
@@ -52,4 +44,3 @@ public class ViewportRenderer {
         commandBuffer.commit()
     }
 }
-

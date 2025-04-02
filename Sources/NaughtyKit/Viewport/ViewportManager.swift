@@ -1,6 +1,4 @@
 // Copyright (c) 2025 The Noughy Fox
-//
-// This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
 import Foundation
@@ -55,12 +53,13 @@ public final class ViewportManager {
     private var viewports: [UUID: Viewport] = [:]
     public private(set) var activeViewport: UUID?
 
-    public init() {
-    }
+    public init() {}
 
     @discardableResult
     public func createViewport(
-        name: String, delegate: ViewportDelegate? = nil, eventDelegate: ViewportEventDelegate? = nil
+        name: String, 
+        delegate: ViewportDelegate? = nil, 
+        eventDelegate: ViewportEventDelegate? = nil
     ) -> Viewport {
         let viewport = Viewport(name: name)
         viewport.delegate = delegate
@@ -79,18 +78,15 @@ public final class ViewportManager {
         guard let viewport = viewports[id] else {
             return nil
         }
-
         return viewport.getViewportView()
     }
 
     @MainActor
     public func getActiveViewportView() -> ViewportView? {
         guard let activeId = activeViewport,
-            let viewport = viewports[activeId]
-        else {
+              let viewport = viewports[activeId] else {
             return nil
         }
-
         return viewport.getViewportView()
     }
 
@@ -118,7 +114,6 @@ public final class ViewportManager {
         guard viewports[id] != nil else {
             return
         }
-
         activeViewport = id
     }
 
@@ -129,4 +124,3 @@ public final class ViewportManager {
         return viewports[activeId]
     }
 }
-

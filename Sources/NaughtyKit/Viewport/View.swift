@@ -1,6 +1,4 @@
 // Copyright (c) 2025 The Noughy Fox
-//
-// This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
 import Combine
@@ -21,6 +19,7 @@ import SwiftUI
         public func makeUIView(context: Context) -> TouchEnabledMTKView {
             let view = TouchEnabledMTKView()
 
+            //NOTE: Setup Metal device and view properties
             if let device = MTLCreateSystemDefaultDevice() {
                 view.device = device
             }
@@ -36,7 +35,6 @@ import SwiftUI
             view.depthStencilPixelFormat = .depth32Float
 
             setupGestureRecognizers(for: view, with: coordinator)
-
             return view
         }
 
@@ -74,9 +72,8 @@ import SwiftUI
             rotationGesture.delegate = coordinator
             view.addGestureRecognizer(rotationGesture)
 
-            // Swipe gestures for all directions
+            // Swipe gestures
             let directions: [UISwipeGestureRecognizer.Direction] = [.right, .left, .up, .down]
-
             for direction in directions {
                 let swipeGesture = UISwipeGestureRecognizer(
                     target: coordinator,
@@ -133,7 +130,6 @@ import SwiftUI
             super.touchesCancelled(touches, with: event)
         }
     }
-
 #else
     import AppKit
 
@@ -148,6 +144,7 @@ import SwiftUI
         public func makeNSView(context: Context) -> MouseEnabledMTKView {
             let view = MouseEnabledMTKView()
 
+            //NOTE: Setup Metal device and view properties
             if let device = MTLCreateSystemDefaultDevice() {
                 view.device = device
             }
@@ -162,7 +159,6 @@ import SwiftUI
             view.depthStencilPixelFormat = .depth32Float
 
             setupGestureRecognizers(for: view, with: coordinator)
-
             return view
         }
 
@@ -242,12 +238,12 @@ import SwiftUI
         }
 
         override public func keyDown(with event: NSEvent) {
-            mouseDelegate?.keyDown(with: event, in: self)
+            mouseDelegate?.keyEvent(with: event, in: self, isDown: true)
             super.keyDown(with: event)
         }
 
         override public func keyUp(with event: NSEvent) {
-            mouseDelegate?.keyUp(with: event, in: self)
+            mouseDelegate?.keyEvent(with: event, in: self, isDown: false)
             super.keyUp(with: event)
         }
 

@@ -1,6 +1,4 @@
 // Copyright (c) 2025 The Noughy Fox
-//
-// This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
 import Foundation
@@ -18,10 +16,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
     #else
         internal var isMouseDown: Bool = false
         internal var multiGestureActive: Bool = false
-        internal var shiftKeyDown: Bool = false
-        internal var controlKeyDown: Bool = false
-        internal var optionKeyDown: Bool = false
-        internal var commandKeyDown: Bool = false
+        internal var modifierFlags: Int = 0
     #endif
 
     public init(viewport: Viewport) {
@@ -71,22 +66,17 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
             // Allow pinch and rotation to work together
-            if (gestureRecognizer is UIPinchGestureRecognizer
-                && otherGestureRecognizer is UIRotationGestureRecognizer)
-                || (gestureRecognizer is UIRotationGestureRecognizer
-                    && otherGestureRecognizer is UIPinchGestureRecognizer)
-            {
+            if (gestureRecognizer is UIPinchGestureRecognizer && otherGestureRecognizer is UIRotationGestureRecognizer) ||
+               (gestureRecognizer is UIRotationGestureRecognizer && otherGestureRecognizer is UIPinchGestureRecognizer) {
                 return true
             }
-
+            
             // Never allow pan with pinch or rotation
-            if gestureRecognizer is UIPanGestureRecognizer
-                && (otherGestureRecognizer is UIPinchGestureRecognizer
-                    || otherGestureRecognizer is UIRotationGestureRecognizer)
-            {
+            if gestureRecognizer is UIPanGestureRecognizer &&
+               (otherGestureRecognizer is UIPinchGestureRecognizer || otherGestureRecognizer is UIRotationGestureRecognizer) {
                 return false
             }
-
+            
             return false
         }
 
@@ -102,7 +92,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let rawTranslation = vec2f(x: Float(translation.x), y: Float(translation.y))
             let normalizedTranslation = PositionNormalizer.normalizeVector(rawTranslation, in: view)
 
-            viewport.eventDelegate?.panGesture(
+            viewport.eventDelegate?.dragGesture(
                 viewport,
                 translation: normalizedTranslation,
                 velocity: normalizedVelocity,
@@ -123,7 +113,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let location = sender.location(in: view)
             let normalizedPosition = PositionNormalizer.normalizePosition(location, in: view)
 
-            viewport.eventDelegate?.pinchGesture(
+            viewport.eventDelegate?.zoomGesture(
                 viewport,
                 scale: Float(sender.scale),
                 position: normalizedPosition,
@@ -143,7 +133,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let location = sender.location(in: view)
             let normalizedPosition = PositionNormalizer.normalizePosition(location, in: view)
 
-            viewport.eventDelegate?.rotationGesture(
+            viewport.eventDelegate?.rotateGesture(
                 viewport,
                 angle: Float(sender.rotation),
                 position: normalizedPosition,
@@ -164,9 +154,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let location = sender.location(in: view)
                 let normalizedPosition = PositionNormalizer.normalizePosition(location, in: view)
 
-                // Determine swipe direction and velocity
                 var direction = vec2f(x: 0, y: 0)
-
                 switch sender.direction {
                 case .right: direction.x = 1
                 case .left: direction.x = -1
@@ -175,8 +163,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 default: break
                 }
 
-                // Use pan gesture with fixed velocity for swipes
-                viewport.eventDelegate?.panGesture(
+                viewport.eventDelegate?.dragGesture(
                     viewport,
                     translation: direction * 0.2,
                     velocity: direction * 1000,
@@ -193,9 +180,8 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let location = sender.location(in: view)
                 let normalizedPosition = PositionNormalizer.normalizePosition(location, in: view)
 
-                viewport.eventDelegate?.pointerDown(
-                    viewport, position: normalizedPosition, button: 0)
-                viewport.eventDelegate?.pointerUp(viewport, position: normalizedPosition, button: 0)
+                viewport.eventDelegate?.cursorDown(viewport, position: normalizedPosition, button: 0)
+                viewport.eventDelegate?.cursorUp(viewport, position: normalizedPosition, button: 0)
             }
         }
 
@@ -206,9 +192,8 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let location = sender.location(in: view)
                 let normalizedPosition = PositionNormalizer.normalizePosition(location, in: view)
 
-                viewport.eventDelegate?.pointerDown(
-                    viewport, position: normalizedPosition, button: 2)
-                viewport.eventDelegate?.pointerUp(viewport, position: normalizedPosition, button: 2)
+                viewport.eventDelegate?.cursorDown(viewport, position: normalizedPosition, button: 2)
+                viewport.eventDelegate?.cursorUp(viewport, position: normalizedPosition, button: 2)
             }
         }
 
@@ -220,10 +205,9 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
 
             switch sender.state {
             case .began:
-                viewport.eventDelegate?.pointerDown(
-                    viewport, position: normalizedPosition, button: 1)
+                viewport.eventDelegate?.cursorDown(viewport, position: normalizedPosition, button: 1)
             case .ended, .cancelled:
-                viewport.eventDelegate?.pointerUp(viewport, position: normalizedPosition, button: 1)
+                viewport.eventDelegate?.cursorUp(viewport, position: normalizedPosition, button: 1)
             default:
                 break
             }
@@ -231,17 +215,11 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
 
         private func updateMultiTouchState(for gestureRecognizer: UIGestureRecognizer) {
             if gestureRecognizer.state == .began {
-                if let pinchGesture = gestureRecognizer as? UIPinchGestureRecognizer,
-                    pinchGesture.numberOfTouches >= 2
-                {
+                if let pinchGesture = gestureRecognizer as? UIPinchGestureRecognizer, pinchGesture.numberOfTouches >= 2 {
                     multiTouchGestureActive = true
-                } else if let rotationGesture = gestureRecognizer as? UIRotationGestureRecognizer,
-                    rotationGesture.numberOfTouches >= 2
-                {
+                } else if let rotationGesture = gestureRecognizer as? UIRotationGestureRecognizer, rotationGesture.numberOfTouches >= 2 {
                     multiTouchGestureActive = true
-                } else if let panGesture = gestureRecognizer as? UIPanGestureRecognizer,
-                    panGesture.numberOfTouches >= 2
-                {
+                } else if let panGesture = gestureRecognizer as? UIPanGestureRecognizer, panGesture.numberOfTouches >= 2 {
                     multiTouchGestureActive = true
                 }
             } else if gestureRecognizer.state == .ended || gestureRecognizer.state == .cancelled {
@@ -266,10 +244,9 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let location = touch.location(in: view)
                 lastTouchLocations[touch] = location
 
-                // Only send pointer events for single touches when not in multi-touch mode
                 if activeTouchCount == 1 {
                     let position = PositionNormalizer.normalizePosition(location, in: view)
-                    viewport.eventDelegate?.pointerDown(viewport, position: position, button: 0)
+                    viewport.eventDelegate?.cursorDown(viewport, position: position, button: 0)
                 }
             }
         }
@@ -286,7 +263,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                     let location = touch.location(in: view)
                     lastTouchLocations[touch] = location
                     let position = PositionNormalizer.normalizePosition(location, in: view)
-                    viewport.eventDelegate?.pointerMoved(viewport, position: position)
+                    viewport.eventDelegate?.cursorMoved(viewport, position: position)
                 }
             }
         }
@@ -299,7 +276,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let position = PositionNormalizer.normalizePosition(location, in: view)
 
                 if activeTouchCount <= 1 {
-                    viewport.eventDelegate?.pointerUp(viewport, position: position, button: 0)
+                    viewport.eventDelegate?.cursorUp(viewport, position: position, button: 0)
                 }
 
                 lastTouchLocations.removeValue(forKey: touch)
@@ -307,7 +284,6 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
 
             if let allTouches = event?.allTouches {
                 activeTouchCount = allTouches.count
-
                 if allTouches.isEmpty {
                     activeTouchCount = 0
                     multiTouchGestureActive = false
@@ -315,14 +291,13 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             }
         }
 
-        public func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?, in view: UIView)
-        {
+        public func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?, in view: UIView) {
             guard let viewport = self.viewport else { return }
 
             for touch in touches {
                 let location = touch.location(in: view)
                 let position = PositionNormalizer.normalizePosition(location, in: view)
-                viewport.eventDelegate?.pointerUp(viewport, position: position, button: 0)
+                viewport.eventDelegate?.cursorUp(viewport, position: position, button: 0)
                 lastTouchLocations.removeValue(forKey: touch)
             }
 
@@ -330,7 +305,6 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             multiTouchGestureActive = false
         }
     }
-
 #else
     import AppKit
 
@@ -346,7 +320,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let rawTranslation = vec2f(x: Float(translation.x), y: Float(translation.y))
             let normalizedTranslation = PositionNormalizer.normalizeVector(rawTranslation, in: view)
 
-            viewport.eventDelegate?.panGesture(
+            viewport.eventDelegate?.dragGesture(
                 viewport,
                 translation: normalizedTranslation,
                 velocity: vec2f(x: 0, y: 0),
@@ -358,8 +332,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 sender.setTranslation(.zero, in: view)
             }
 
-            multiGestureActive =
-                sender.state == .began || (sender.state != .ended && sender.state != .cancelled)
+            multiGestureActive = sender.state == .began || (sender.state != .ended && sender.state != .cancelled)
         }
 
         @objc public func handleMagnificationGesture(_ sender: NSMagnificationGestureRecognizer) {
@@ -368,7 +341,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let location = sender.location(in: view)
             let normalizedCenter = PositionNormalizer.normalizePosition(location, in: view)
 
-            viewport.eventDelegate?.pinchGesture(
+            viewport.eventDelegate?.zoomGesture(
                 viewport,
                 scale: Float(sender.magnification + 1.0),
                 position: normalizedCenter,
@@ -379,8 +352,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 sender.magnification = 0.0
             }
 
-            multiGestureActive =
-                sender.state == .began || (sender.state != .ended && sender.state != .cancelled)
+            multiGestureActive = sender.state == .began || (sender.state != .ended && sender.state != .cancelled)
         }
 
         @objc public func handleRotationGesture(_ sender: NSRotationGestureRecognizer) {
@@ -390,7 +362,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let normalizedCenter = PositionNormalizer.normalizePosition(location, in: view)
             let rotationRadians = -Float(sender.rotation)
 
-            viewport.eventDelegate?.rotationGesture(
+            viewport.eventDelegate?.rotateGesture(
                 viewport,
                 angle: rotationRadians,
                 position: normalizedCenter,
@@ -401,8 +373,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 sender.rotation = 0
             }
 
-            multiGestureActive =
-                sender.state == .began || (sender.state != .ended && sender.state != .cancelled)
+            multiGestureActive = sender.state == .began || (sender.state != .ended && sender.state != .cancelled)
         }
 
         @objc public func handleClickGesture(_ sender: NSClickGestureRecognizer) {
@@ -412,9 +383,8 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let location = sender.location(in: view)
                 let normalizedPosition = PositionNormalizer.normalizePosition(location, in: view)
 
-                viewport.eventDelegate?.pointerDown(
-                    viewport, position: normalizedPosition, button: 0)
-                viewport.eventDelegate?.pointerUp(viewport, position: normalizedPosition, button: 0)
+                viewport.eventDelegate?.cursorDown(viewport, position: normalizedPosition, button: 0)
+                viewport.eventDelegate?.cursorUp(viewport, position: normalizedPosition, button: 0)
             }
         }
     }
@@ -428,7 +398,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let viewLocation = view.convert(event.locationInWindow, from: nil)
             let position = PositionNormalizer.normalizePosition(viewLocation, in: view)
 
-            viewport.eventDelegate?.pointerDown(viewport, position: position, button: 0)
+            viewport.eventDelegate?.cursorDown(viewport, position: position, button: 0)
         }
 
         public func mouseDragged(with event: NSEvent, in view: NSView) {
@@ -438,7 +408,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
                 let viewLocation = view.convert(event.locationInWindow, from: nil)
                 let position = PositionNormalizer.normalizePosition(viewLocation, in: view)
 
-                viewport.eventDelegate?.pointerMoved(viewport, position: position)
+                viewport.eventDelegate?.cursorMoved(viewport, position: position)
             }
         }
 
@@ -449,7 +419,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let viewLocation = view.convert(event.locationInWindow, from: nil)
             let position = PositionNormalizer.normalizePosition(viewLocation, in: view)
 
-            viewport.eventDelegate?.pointerUp(viewport, position: position, button: 0)
+            viewport.eventDelegate?.cursorUp(viewport, position: position, button: 0)
         }
 
         public func rightMouseDown(with event: NSEvent, in view: NSView) {
@@ -458,7 +428,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let viewLocation = view.convert(event.locationInWindow, from: nil)
             let position = PositionNormalizer.normalizePosition(viewLocation, in: view)
 
-            viewport.eventDelegate?.pointerDown(viewport, position: position, button: 1)
+            viewport.eventDelegate?.cursorDown(viewport, position: position, button: 1)
         }
 
         public func rightMouseDragged(with event: NSEvent, in view: NSView) {
@@ -467,7 +437,7 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let viewLocation = view.convert(event.locationInWindow, from: nil)
             let position = PositionNormalizer.normalizePosition(viewLocation, in: view)
 
-            viewport.eventDelegate?.pointerMoved(viewport, position: position)
+            viewport.eventDelegate?.cursorMoved(viewport, position: position)
         }
 
         public func rightMouseUp(with event: NSEvent, in view: NSView) {
@@ -476,49 +446,37 @@ public class ViewportCoordinator: NSObject, MTKViewDelegate {
             let viewLocation = view.convert(event.locationInWindow, from: nil)
             let position = PositionNormalizer.normalizePosition(viewLocation, in: view)
 
-            viewport.eventDelegate?.pointerUp(viewport, position: position, button: 1)
+            viewport.eventDelegate?.cursorUp(viewport, position: position, button: 1)
         }
 
         public func scrollWheel(with event: NSEvent, in view: NSView) {
-            // Handle scroll wheel if needed
+            // Handle scroll wheel
         }
 
-        public func keyDown(with event: NSEvent, in view: NSView) {
+        public func keyEvent(with event: NSEvent, in view: NSView, isDown: Bool) {
             guard let viewport = self.viewport else { return }
 
             let characters = event.charactersIgnoringModifiers ?? ""
             let keyCode = event.keyCode
             let modifiers = event.modifierFlags.rawValue
 
-            viewport.eventDelegate?.keyDown(
-                viewport, keyCode: UInt(keyCode), characters: characters, modifiers: Int(modifiers))
-
-            updateModifierKeyStates(flags: event.modifierFlags)
-        }
-
-        public func keyUp(with event: NSEvent, in view: NSView) {
-            guard let viewport = self.viewport else { return }
-
-            let characters = event.charactersIgnoringModifiers ?? ""
-            let keyCode = event.keyCode
-            let modifiers = event.modifierFlags.rawValue
-
-            viewport.eventDelegate?.keyUp(
-                viewport, keyCode: UInt(keyCode), characters: characters, modifiers: Int(modifiers))
-
-            updateModifierKeyStates(flags: event.modifierFlags)
+            viewport.eventDelegate?.keyEvent(
+                viewport, 
+                keyCode: UInt(keyCode), 
+                characters: characters, 
+                modifiers: Int(modifiers), 
+                isDown: isDown
+            )
+            
+            updateModifierFlags(flags: event.modifierFlags)
         }
 
         public func flagsChanged(with event: NSEvent, in view: NSView) {
-            updateModifierKeyStates(flags: event.modifierFlags)
+            updateModifierFlags(flags: event.modifierFlags)
         }
 
-        internal func updateModifierKeyStates(flags: NSEvent.ModifierFlags) {
-            shiftKeyDown = flags.contains(.shift)
-            controlKeyDown = flags.contains(.control)
-            optionKeyDown = flags.contains(.option)
-            commandKeyDown = flags.contains(.command)
+        private func updateModifierFlags(flags: NSEvent.ModifierFlags) {
+            modifierFlags = Int(flags.rawValue)
         }
     }
 #endif
-
