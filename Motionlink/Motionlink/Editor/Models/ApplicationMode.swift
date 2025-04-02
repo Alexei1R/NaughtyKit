@@ -28,10 +28,10 @@ enum ApplicationMode: String, CaseIterable, Identifiable {
     func createView() -> some View {
         VStack {
             Spacer()
-             Text("\(self.title) Mode View")
+            Text("\(self.title) Mode View")
                 .font(EditorConfiguration.primaryFont(size: 16, weight: .light))
                 .foregroundColor(EditorConfiguration.primaryText)
-             Text("(Content Placeholder)")
+            Text("(Content Placeholder)")
                 .font(EditorConfiguration.secondaryFont())
                 .foregroundColor(EditorConfiguration.secondaryText)
                 .padding(.top, EditorConfiguration.compactPadding)

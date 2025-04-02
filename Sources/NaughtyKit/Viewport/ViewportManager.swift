@@ -7,7 +7,6 @@ import Foundation
 import MetalKit
 import SwiftUI
 
-/// Viewport configuration
 public struct ViewportConfig {
     public var clearColor: MTLClearColor
     public var isEnabled: Bool
@@ -21,13 +20,16 @@ public struct ViewportConfig {
     }
 }
 
-/// Viewport information
 public final class Viewport {
     public let id: UUID
     public var name: String
     public var config: ViewportConfig
 
+    weak var delegate: ViewportDelegate?
+    weak var eventDelegate: ViewportEventDelegate?
+
     private var _viewportView: ViewportView?
+    private var coordinator: ViewportCoordinator?
 
     public init(name: String, config: ViewportConfig = ViewportConfig()) {
         self.id = UUID()
@@ -38,8 +40,8 @@ public final class Viewport {
     @MainActor
     public func getViewportView() -> ViewportView {
         if _viewportView == nil {
-            Log.info(" Creating new ViewportView for '\(name)' (ID: \(id))")
-            _viewportView = ViewportView()
+            coordinator = ViewportCoordinator(viewport: self)
+            _viewportView = ViewportView(coordinator: coordinator!)
         }
         return _viewportView!
     }
@@ -49,28 +51,26 @@ public final class Viewport {
     }
 }
 
-/// Viewport manager resource
 public final class ViewportManager {
-    private weak var world: World?
     private var viewports: [UUID: Viewport] = [:]
     public private(set) var activeViewport: UUID?
 
-    public init(world: World) {
-        self.world = world
-        Log.info(" Initialized")
+    public init() {
     }
 
     @discardableResult
-    public func createViewport(name: String) -> Viewport {
+    public func createViewport(
+        name: String, delegate: ViewportDelegate? = nil, eventDelegate: ViewportEventDelegate? = nil
+    ) -> Viewport {
         let viewport = Viewport(name: name)
+        viewport.delegate = delegate
+        viewport.eventDelegate = eventDelegate
         viewports[viewport.id] = viewport
 
         if activeViewport == nil {
             activeViewport = viewport.id
-            Log.info(" Set '\(name)' as active viewport (ID: \(viewport.id))")
         }
 
-        Log.info(" Created viewport '\(name)' (ID: \(viewport.id))")
         return viewport
     }
 
@@ -88,28 +88,22 @@ public final class ViewportManager {
         guard let activeId = activeViewport,
             let viewport = viewports[activeId]
         else {
-            Log.info(" Cannot get active viewport view: No active viewport")
             return nil
         }
 
-        let view = viewport.getViewportView()
-        return view
+        return viewport.getViewportView()
     }
 
     public func removeViewport(id: UUID) {
-        guard let viewport = viewports[id] else {
+        guard viewports[id] != nil else {
             return
         }
 
         if activeViewport == id {
             activeViewport = viewports.keys.first(where: { $0 != id })
-            Log.info(
-                "Active viewport removed, new active: \(activeViewport?.uuidString ?? "None")"
-            )
         }
 
         viewports.removeValue(forKey: id)
-        Log.info("Removed viewport '\(viewport.name)' (ID: \(id))")
     }
 
     public func getViewport(id: UUID) -> Viewport? {
@@ -121,12 +115,11 @@ public final class ViewportManager {
     }
 
     public func setActiveViewport(id: UUID) {
-        guard let viewport = viewports[id] else {
+        guard viewports[id] != nil else {
             return
         }
 
         activeViewport = id
-        Log.info("Set '\(viewport.name)' as active viewport (ID: \(id))")
     }
 
     public func getActiveViewport() -> Viewport? {
@@ -136,3 +129,4 @@ public final class ViewportManager {
         return viewports[activeId]
     }
 }
+

@@ -9,10 +9,12 @@ import SwiftUI
 
 #if os(iOS)
     import UIKit
-    // NOTE: - iOS implementation
+
     public struct ViewportView: UIViewRepresentable {
-        public init() {
-            print("ViewportView initialized")
+        private let coordinator: ViewportCoordinator
+
+        public init(coordinator: ViewportCoordinator) {
+            self.coordinator = coordinator
         }
 
         @MainActor
@@ -23,9 +25,9 @@ import SwiftUI
                 view.device = device
             }
 
-            view.delegate = context.coordinator
-            view.touchDelegate = context.coordinator
-            view.clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.0, alpha: 1.0)
+            view.delegate = coordinator
+            view.touchDelegate = coordinator
+            view.clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
             view.preferredFramesPerSecond = 60
             view.isPaused = false
             view.enableSetNeedsDisplay = false
@@ -33,7 +35,7 @@ import SwiftUI
             view.colorPixelFormat = .bgra8Unorm
             view.depthStencilPixelFormat = .depth32Float
 
-            setupGestureRecognizers(for: view, with: context.coordinator)
+            setupGestureRecognizers(for: view, with: coordinator)
 
             return view
         }
@@ -43,7 +45,7 @@ import SwiftUI
 
         @MainActor
         public func makeCoordinator() -> ViewportCoordinator {
-            return ViewportCoordinator()
+            return coordinator
         }
 
         @MainActor
@@ -58,7 +60,7 @@ import SwiftUI
             panGesture.maximumNumberOfTouches = 1
             view.addGestureRecognizer(panGesture)
 
-            // Pinch gesture for zooming
+            // Pinch gesture for zooming/scaling
             let pinchGesture = UIPinchGestureRecognizer(
                 target: coordinator,
                 action: #selector(ViewportCoordinator.handlePinchGesture(_:)))
@@ -71,6 +73,39 @@ import SwiftUI
                 action: #selector(ViewportCoordinator.handleRotationGesture(_:)))
             rotationGesture.delegate = coordinator
             view.addGestureRecognizer(rotationGesture)
+
+            // Swipe gestures for all directions
+            let directions: [UISwipeGestureRecognizer.Direction] = [.right, .left, .up, .down]
+
+            for direction in directions {
+                let swipeGesture = UISwipeGestureRecognizer(
+                    target: coordinator,
+                    action: #selector(ViewportCoordinator.handleSwipeGesture(_:)))
+                swipeGesture.direction = direction
+                view.addGestureRecognizer(swipeGesture)
+            }
+
+            // Long press gesture
+            let longPressGesture = UILongPressGestureRecognizer(
+                target: coordinator,
+                action: #selector(ViewportCoordinator.handleLongPressGesture(_:)))
+            longPressGesture.minimumPressDuration = 0.5
+            view.addGestureRecognizer(longPressGesture)
+
+            // Tap gesture
+            let tapGesture = UITapGestureRecognizer(
+                target: coordinator,
+                action: #selector(ViewportCoordinator.handleTapGesture(_:)))
+            tapGesture.numberOfTapsRequired = 1
+            view.addGestureRecognizer(tapGesture)
+
+            // Double tap gesture
+            let doubleTapGesture = UITapGestureRecognizer(
+                target: coordinator,
+                action: #selector(ViewportCoordinator.handleDoubleTapGesture(_:)))
+            doubleTapGesture.numberOfTapsRequired = 2
+            tapGesture.require(toFail: doubleTapGesture)
+            view.addGestureRecognizer(doubleTapGesture)
         }
     }
 
@@ -102,10 +137,11 @@ import SwiftUI
 #else
     import AppKit
 
-    // NOTE: - macOS implementation
     public struct ViewportView: NSViewRepresentable {
-        public init() {
-            print("ViewportView initialized")
+        private let coordinator: ViewportCoordinator
+
+        public init(coordinator: ViewportCoordinator) {
+            self.coordinator = coordinator
         }
 
         @MainActor
@@ -116,8 +152,8 @@ import SwiftUI
                 view.device = device
             }
 
-            view.delegate = context.coordinator
-            view.mouseDelegate = context.coordinator
+            view.delegate = coordinator
+            view.mouseDelegate = coordinator
             view.clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.2, alpha: 1.0)
             view.preferredFramesPerSecond = 60
             view.isPaused = false
@@ -125,7 +161,7 @@ import SwiftUI
             view.colorPixelFormat = .bgra8Unorm
             view.depthStencilPixelFormat = .depth32Float
 
-            setupGestureRecognizers(for: view, with: context.coordinator)
+            setupGestureRecognizers(for: view, with: coordinator)
 
             return view
         }
@@ -135,30 +171,32 @@ import SwiftUI
 
         @MainActor
         public func makeCoordinator() -> ViewportCoordinator {
-            return ViewportCoordinator()
+            return coordinator
         }
 
         @MainActor
         private func setupGestureRecognizers(
             for view: NSView, with coordinator: ViewportCoordinator
         ) {
-            // Setup magnification gesture (pinch)
             let magnificationGesture = NSMagnificationGestureRecognizer(
                 target: coordinator,
                 action: #selector(ViewportCoordinator.handleMagnificationGesture(_:)))
             view.addGestureRecognizer(magnificationGesture)
 
-            // Setup rotation gesture
             let rotationGesture = NSRotationGestureRecognizer(
                 target: coordinator,
                 action: #selector(ViewportCoordinator.handleRotationGesture(_:)))
             view.addGestureRecognizer(rotationGesture)
 
-            // Setup pan gesture
             let panGesture = NSPanGestureRecognizer(
                 target: coordinator,
                 action: #selector(ViewportCoordinator.handlePanGesture(_:)))
             view.addGestureRecognizer(panGesture)
+
+            let clickGesture = NSClickGestureRecognizer(
+                target: coordinator,
+                action: #selector(ViewportCoordinator.handleClickGesture(_:)))
+            view.addGestureRecognizer(clickGesture)
         }
     }
 
@@ -166,11 +204,8 @@ import SwiftUI
     public class MouseEnabledMTKView: MTKView {
         weak var mouseDelegate: MouseEventDelegate?
 
-        override public var acceptsFirstResponder: Bool {
-            return true
-        }
+        override public var acceptsFirstResponder: Bool { return true }
 
-        //NOTE: Mouse Event Handling
         override public func mouseDown(with event: NSEvent) {
             mouseDelegate?.mouseDown(with: event, in: self)
             super.mouseDown(with: event)
@@ -206,7 +241,6 @@ import SwiftUI
             super.scrollWheel(with: event)
         }
 
-        //NOTE:  Keyboard Event Handling
         override public func keyDown(with event: NSEvent) {
             mouseDelegate?.keyDown(with: event, in: self)
             super.keyDown(with: event)
@@ -223,3 +257,4 @@ import SwiftUI
         }
     }
 #endif
+
